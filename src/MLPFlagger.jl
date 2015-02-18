@@ -15,6 +15,8 @@
 
 module MLPFlagger
 
+export clear!, flag!
+
 using CasaCore.Tables
 
 @doc """
@@ -28,12 +30,19 @@ function clear!(ms::Table)
     flags
 end
 
-@doc """
-Derive and apply antenna flags to the measurement set.
-""" ->
-function antennas(ms::Table)
+function flag!(ms::Table)
     autos = getautos(ms)
+    antenna_flags = flag_antennas(autos)
+    channel_flags = flag_channels(autos,antenna_flags)
+    apply_antenna_flags!(ms,antenna_flags)
+    apply_channel_flags!(ms,channel_flags)
+    nothing
+end
 
+@doc """
+Derive a list of antennas to flag.
+""" ->
+function flag_antennas(autos)
     # Flag the antennas with too much power
     xx_power = log10(abs(squeeze(median(squeeze(autos[1,:,:],1),1),1)))
     xy_power = log10(abs(squeeze(median(squeeze(autos[2,:,:],1),1),1)))
@@ -43,21 +52,58 @@ function antennas(ms::Table)
     xy_flags = flag(xy_power,Niter=2)
     yy_flags = flag(yy_power,Niter=2)
 
-    # Flag the antenna if appears in at least 2 of 3 cases
+    # Flag the antenna if it appears in at least 2 of 3 cases
     votes = xx_flags + xy_flags + yy_flags
-    flagged = votes .>= 2
+    flags = votes .>= 2
+    flags
+end
 
-    # Apply the flags to the measurement set
+function apply_antenna_flags!(ms::Table,antenna_flags)
+    N = numrows(ms)
     ant1 = ms["ANTENNA1"] + 1
     ant2 = ms["ANTENNA2"] + 1
     flags = ms["FLAG"]
     for α = 1:N
-        if flagged[ant1[α]] || flagged[ant2[α]]
+        if antenna_flags[ant1[α]] || antenna_flags[ant2[α]]
             flags[:,:,α] = true
         end
     end
     ms["FLAG"] = flags
+    flags
+end
 
+function flag_channels(autos,antenna_flags)
+    Nfreq = size(autos,2)
+    Nant  = size(autos,3)
+    votes = zeros(Int,Nfreq)
+    for ant = 1:Nant
+        antenna_flags[ant] && continue
+
+        xx_spectrum = abs(squeeze(autos[1,:,ant],1))
+        xy_spectrum = abs(squeeze(autos[2,:,ant],1))
+        yy_spectrum = abs(squeeze(autos[4,:,ant],1))
+
+        xx_flags = flag(xx_spectrum,Niter=2)
+        xy_flags = flag(xy_spectrum,Niter=2)
+        yy_flags = flag(yy_spectrum,Niter=2)
+
+        votes += xx_flags + xy_flags + yy_flags
+    end
+    
+    # Flag the antenna if it receives at least 10 votes
+    flags = votes .>= 10
+    flags
+end
+
+function apply_channel_flags!(ms::Table,channel_flags)
+    N = length(channel_flags)
+    flags = ms["FLAG"]
+    for β = 1:N
+        if channel_flags[β]
+            flags[:,β,:] = true
+        end
+    end
+    ms["FLAG"] = flags
     flags
 end
 
