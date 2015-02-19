@@ -1,13 +1,21 @@
 language: julia
 os:
-  - linux
-  - osx
+    - linux
 julia:
-  - release
-  - nightly
+    - nightly
 notifications:
-  email: false
-# uncomment the following lines to override the default test script
-#script:
-#  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-#  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("MLPFlagger"); Pkg.test("MLPFlagger"; coverage=true)'
+    email: false
+before_install:
+    - sudo add-apt-repository ppa:ska-sa/main -y
+    - sudo apt-get update -qq -y
+    - sudo apt-get install libcasacore-dev -y
+    - sudo apt-get install casacore-data -y
+    - julia -e "Pkg.clone(\"SIUnits\")"
+    - julia -e "Pkg.clone(\"https://github.com/mweastwood/CasaCore.jl.git\")"
+    - julia -e "Pkg.build(\"CasaCore\")"
+script:
+    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+    - julia --check-bounds=yes -e "Pkg.clone(pwd()); Pkg.test(\"MLPFlagger\"; coverage=true)"
+after_success:
+    - julia -e "cd(Pkg.dir(\"TTCal\")); Pkg.add(\"Coverage\"); using Coverage; Coveralls.submit(Coveralls.process_folder())"
+
