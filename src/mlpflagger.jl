@@ -46,9 +46,9 @@ import MLPFlagger
 try
     command,args = CLI.parse_args(ARGS)
     if     command == "clear"
-        TTCal.run_clear(args)
+        MLPFlagger.run_clear(args)
     elseif command == "flag"
-        TTCal.run_flag(args)
+        MLPFlagger.run_flag(args)
     end
 catch err
     if isa(err, ErrorException)
