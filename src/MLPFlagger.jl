@@ -19,6 +19,16 @@ export clear!, flag!
 
 using CasaCore.Tables
 
+function run_clear(args)
+    clear!(Table(args["--input"]))
+    nothing
+end
+
+function run_flag(args)
+    flag!(Table(args["--input"]))
+    nothing
+end
+
 @doc """
 Clear all of the flags in the measurement set.
 """ ->
