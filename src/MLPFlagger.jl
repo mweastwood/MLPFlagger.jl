@@ -34,7 +34,9 @@ Clear all of the flags in the measurement set.
 """ ->
 function clear!(ms::Table)
     N = numrows(ms)
-    Nfreq = length(freq(ms))
+    spw = Table(ms[kw"SPECTRAL_WINDOW"])
+    freq  = spw["CHAN_FREQ",1]
+    Nfreq = length(freq)
     flags = zeros(Bool,4,Nfreq,N)
     ms["FLAG"] = flags
     flags

@@ -23,12 +23,32 @@ function createms()
     name  = tempname()*".ms"
     table = Table(name)
 
+    subtable = Table("$name/SPECTRAL_WINDOW")
+    Tables.addRows!(subtable,1)
+    subtable["CHAN_FREQ"] = reshape(linspace(0,1,Nfreq),Nfreq,1)
+    finalize(subtable)
+
     Tables.addRows!(table,Nbase)
+    table[kw"SPECTRAL_WINDOW"] = "Table: $name/SPECTRAL_WINDOW"
     table["ANTENNA1"] = ant1-1
     table["ANTENNA2"] = ant2-1
 
     name,table
 end
+
+# Clear flags
+function test_clear_flags()
+    name,ms = createms()
+
+    # Generate flags
+    flags = rand(Bool,4,Nfreq,Nbase)
+    ms["FLAG"] = flags
+
+    # Test
+    clear!(ms)
+    @test ms["FLAG"] == zeros(Bool,4,Nfreq,Nbase)
+end
+test_clear_flags()
 
 # Antenna flags
 function test_antenna_flags()
