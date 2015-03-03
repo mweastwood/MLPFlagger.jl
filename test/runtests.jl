@@ -37,7 +37,7 @@ function createms()
 end
 
 # Clear flags
-function test_clear_flags()
+function test_clearflags()
     name,ms = createms()
 
     # Generate flags
@@ -45,10 +45,10 @@ function test_clear_flags()
     ms["FLAG"] = flags
 
     # Test
-    clear!(ms)
+    clearflags!(ms)
     @test ms["FLAG"] == zeros(Bool,4,Nfreq,Nbase)
 end
-test_clear_flags()
+test_clearflags()
 
 # Antenna flags
 function test_antenna_flags()
