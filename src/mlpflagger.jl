@@ -27,10 +27,10 @@ CLI.set_banner("""
 
 CLI.print_banner()
 
-push!(CLI.commands,Command("clear","Clear all flags from the given measurement set."))
+push!(CLI.commands,Command("clearflags","Clear all flags from the given measurement set."))
 push!(CLI.commands,Command("flag","Flag antennas and channels with anomalous autocorrelation power."))
 
-CLI.options["clear"] = [
+CLI.options["clearflags"] = [
     Option("--input","""
         The measurement set that will have its flags cleared.""",
         UTF8String,true,1,1)]
@@ -45,8 +45,8 @@ import MLPFlagger
 # not especially helpful to users.
 try
     command,args = CLI.parse_args(ARGS)
-    if     command == "clear"
-        MLPFlagger.run_clear(args)
+    if     command == "clearflags"
+        MLPFlagger.run_clearflags(args)
     elseif command == "flag"
         MLPFlagger.run_flag(args)
     end

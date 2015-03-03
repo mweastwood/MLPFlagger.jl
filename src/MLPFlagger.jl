@@ -15,12 +15,12 @@
 
 module MLPFlagger
 
-export clear!, flag!
+export clearflags!, flag!
 
 using CasaCore.Tables
 
-function run_clear(args)
-    clear!(Table(args["--input"]))
+function run_clearflags(args)
+    clearflags!(Table(args["--input"]))
     nothing
 end
 
@@ -32,7 +32,7 @@ end
 @doc """
 Clear all of the flags in the measurement set.
 """ ->
-function clear!(ms::Table)
+function clearflags!(ms::Table)
     N = numrows(ms)
     spw = Table(ms[kw"SPECTRAL_WINDOW"])
     freq  = spw["CHAN_FREQ",1]
