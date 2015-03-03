@@ -17,7 +17,7 @@
 
 using CLI
 
-CLI.set_name("ttcal.jl")
+CLI.set_name("mlpflagger.jl")
 CLI.set_banner("""
      MLPFlagger
     ============
