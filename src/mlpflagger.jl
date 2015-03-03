@@ -34,7 +34,7 @@ CLI.options["clearflags"] = [
     Option("--input","""
         The measurement set that will have its flags cleared.""",
         UTF8String,true,1,1)]
-CLI.options["flagantennas"] = [
+CLI.options["flag"] = [
     Option("--input","""
         The measurement set that will be flagged.""",
         UTF8String,true,1,1)]
