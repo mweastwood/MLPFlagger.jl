@@ -18,6 +18,7 @@ module MLPFlagger
 export clearflags!, flag!
 
 using CasaCore.Tables
+using Dierckx
 
 function run_clearflags(args)
     clearflags!(Table(args["--input"]))
@@ -42,9 +43,11 @@ function clearflags!(ms::Table)
     flags
 end
 
-function flag!(ms::Table)
-    autos = getautos(ms)
-    antenna_flags = flag_antennas(autos)
+flag!(ms::Table) = flag!([ms])
+
+function flag!(ms_list::Vector{Table})
+    corrs = getcorrs(ms_list)
+    antenna_flags = flag_antennas(corrs)
     channel_flags = flag_channels(autos,antenna_flags)
     apply_antenna_flags!(ms,antenna_flags)
     apply_channel_flags!(ms,channel_flags)
@@ -54,19 +57,49 @@ end
 @doc """
 Derive a list of antennas to flag.
 """ ->
-function flag_antennas(autos)
-    # Flag the antennas with too much power
-    xx_power = log10(abs(squeeze(median(squeeze(autos[1,:,:],1),1),1)))
-    xy_power = log10(abs(squeeze(median(squeeze(autos[2,:,:],1),1),1)))
-    yy_power = log10(abs(squeeze(median(squeeze(autos[4,:,:],1),1),1)))
+function flag_antennas(corrs)
+    reduction = squeeze(median(abs2(corrs),(1,2)),(1,2))
+    λ,g = eigs(reduction,nev=1,which=:LM,ritzvec=true)
+    antenna_amplitude = sqrt(λ[1])*abs(g)
+    m0 = median(antenna_amplitude)
+    m2 = median((antenna_amplitude-m0).^2)
+    σ = sqrt(m2)
+    flags = squeeze(abs(antenna_amplitude-m0) .> 4σ,2)
 
-    xx_flags = flag(xx_power,Niter=2)
-    xy_flags = flag(xy_power,Niter=2)
-    yy_flags = flag(yy_power,Niter=2)
+    figure(1); clf()
+    plot(antenna_amplitude,"ko")
+    axhline(m0,color="r")
+    axhline(m0+σ,color="r",linestyle="--")
+    axhline(m0-σ,color="r",linestyle="--")
 
-    # Flag the antenna if it appears in at least 2 of 3 cases
-    votes = xx_flags + xy_flags + yy_flags
-    flags = votes .>= 2
+    flags
+end
+
+function flag_channels(corrs,antenna_flags)
+    af = !antenna_flags
+    chans = convert(Vector{Float64},squeeze(median(abs(corrs[:,:,af,af]),(1,3,4)),(1,3,4)))
+    x = linspace(0,1,length(chans))
+
+    # Flag the really strong stuff first
+    m0 = median(chans)
+    m2 = median((chans-m0).^2)
+    σ = sqrt(m2)
+    flags = (chans-m0) .> 5σ
+
+    # Now fit a splines
+    k_schedule = [1,1,1,1,1,3,3,3,3,3]
+    s_schedule = logspace(-1,-3,10)
+    Niter = length(k_schedule)
+    for i = 1:Niter
+        k = k_schedule[i]
+        s = s_schedule[i]
+        spline = Spline1D(x[!flags],chans[!flags],k=k,s=s*sum(chans[!flags].^2))
+        smoothed = evaluate(spline,x)
+
+        m2 = median((chans-smoothed).^2)
+        σ = sqrt(m2)
+        flags = (chans-smoothed) .> 5σ
+    end
     flags
 end
 
@@ -84,29 +117,6 @@ function apply_antenna_flags!(ms::Table,antenna_flags)
     flags
 end
 
-function flag_channels(autos,antenna_flags)
-    Nfreq = size(autos,2)
-    Nant  = size(autos,3)
-    votes = zeros(Int,Nfreq)
-    for ant = 1:Nant
-        antenna_flags[ant] && continue
-
-        xx_spectrum = abs(squeeze(autos[1,:,ant],1))
-        xy_spectrum = abs(squeeze(autos[2,:,ant],1))
-        yy_spectrum = abs(squeeze(autos[4,:,ant],1))
-
-        xx_flags = flag(xx_spectrum,Niter=2)
-        xy_flags = flag(xy_spectrum,Niter=2)
-        yy_flags = flag(yy_spectrum,Niter=2)
-
-        votes += xx_flags + xy_flags + yy_flags
-    end
-    
-    # Flag the antenna if it receives at least 10 votes
-    flags = votes .>= 10
-    flags
-end
-
 function apply_channel_flags!(ms::Table,channel_flags)
     N = length(channel_flags)
     flags = ms["FLAG"]
@@ -119,40 +129,25 @@ function apply_channel_flags!(ms::Table,channel_flags)
     flags
 end
 
-function getautos(ms)
-    ant1 = ms["ANTENNA1"] + 1
-    ant2 = ms["ANTENNA2"] + 1
-    data = ms["DATA"]
+function getcorrs(ms_list::Vector{Table})
+    Nms   = length(ms_list)
+    Nbase = numrows(ms_list[1])
+    Nant  = div(isqrt(1+8Nbase)-1,2)
+    Nchan = length(Table(ms_list[1][kw"SPECTRAL_WINDOW"])["CHAN_FREQ"])
 
-    Nant  = length(unique(ant1))
-    Nfreq = size(data,2)
-    Nbase = size(data,3)
+    corrs = zeros(Complex64,4,Nms*Nchan,Nant,Nant)
+    for (β,ms) in enumerate(ms_list)
+        ant1 = ms["ANTENNA1"] + 1
+        ant2 = ms["ANTENNA2"] + 1
+        data = ms["DATA"]
 
-    autos = zeros(4,Nfreq,Nant)
-    count = 1
-    for α = 1:Nbase
-        if ant1[α] == ant2[α]
-            autos[:,:,count] = real(data[:,:,α])
-            count += 1
+        for α = 1:Nbase
+            abs(ant1[α] - ant2[α]) ≤ 0 && continue
+            corrs[:,(β-1)*Nchan+1:β*Nchan,ant1[α],ant2[α]] = data[:,:,α]
+            corrs[:,(β-1)*Nchan+1:β*Nchan,ant2[α],ant1[α]] = conj(data[:,:,α])
         end
     end
-    autos
-end
-
-function flag(vector;Niter::Int=1)
-    flags = zeros(Bool,length(vector))
-    for i = 1:Niter
-        flag!(flags,vector)
-    end
-    flags
-end
-
-function flag!(flags,vector)
-    m0 = median(vector[!flags])
-    m2 = median((vector[!flags]-m0).^2)
-    stddev   = sqrt(m2)
-    flags[:] = abs(vector-m0) .> 5stddev
-    flags
+    corrs
 end
 
 end

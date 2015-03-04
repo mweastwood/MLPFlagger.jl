@@ -57,16 +57,18 @@ function test_antenna_flags()
     # Generate bad data
     bad_antennas = [8:8:Nant;]
     data = Array{Complex64}(4,Nfreq,Nbase)
-    rand!(data)
+    data[:] = 1.0 + randn()
     for α = 1:Nbase
-        if ant1[α] in bad_antennas || ant2[α] in bad_antennas
-            data[:,:,α] += 100.0+100.0im
+        if ant1[α] in bad_antennas && ant2[α] in bad_antennas
+            data[:,:,α] *= 100.0
+        elseif ant1[α] in bad_antennas || ant2[α] in bad_antennas
+            data[:,:,α] *= 10.0
         end
     end
     ms["DATA"] = data
 
     # Test
-    autos = MLPFlagger.getautos(ms)
+    autos = MLPFlagger.getcorrs([ms])
     @test find(MLPFlagger.flag_antennas(autos)) == bad_antennas
 end
 test_antenna_flags()
