@@ -28,16 +28,31 @@ CLI.set_banner("""
 CLI.print_banner()
 
 push!(CLI.commands,Command("clearflags","Clear all flags from the given measurement set."))
-push!(CLI.commands,Command("flag","Flag antennas and channels with anomalous autocorrelation power."))
+push!(CLI.commands,Command("flag","Flag bad antennas and channels with anomalous autocorrelation power."))
 
 CLI.options["clearflags"] = [
     Option("--input","""
-        The measurement set that will have its flags cleared.""",
-        UTF8String,true,1,1)]
+        A list of measurement sets that will have their flags cleared.""",
+        UTF8String,true,1,Inf)]
 CLI.options["flag"] = [
     Option("--input","""
-        The measurement set that will be flagged.""",
-        UTF8String,true,1,1)]
+        A list of measurement sets to flag. The measurement sets should represent
+        different spectral windows from the same time integration.""",
+        UTF8String,true,1,Inf),
+    Option("--antennas","""
+        A list of bad antennas that should be flagged. Antennas are numbered
+        starting from 1.""",
+        Int,false,1,Inf),
+    Option("--output","""
+        A JSON file that will be written to with a record of the antenna and channel
+        flags applied to this list of measurement sets. This allows these flags
+        to easily be applied elsewhere.""",
+        UTF8String,false,1,1),
+    Option("--oldflags","""
+        This is the name of a file previously written to with the --output option.
+        The antenna and channel flags contained within this file will be applied
+        to the current list of measurement sets.""",
+        UTF8String,false,1,1)]
 
 import MLPFlagger
 

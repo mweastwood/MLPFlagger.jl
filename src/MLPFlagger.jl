@@ -19,6 +19,7 @@ export clearflags!, flag!
 
 using CasaCore.Tables
 using Dierckx
+using JSON
 
 function run_clearflags(args)
     clearflags!(Table(args["--input"]))
@@ -26,7 +27,28 @@ function run_clearflags(args)
 end
 
 function run_flag(args)
-    flag!(Table(args["--input"]))
+    ms_list = [Table(ascii(file)) for file in args["--input"]]
+    bad_antennas = Int[]
+    bad_channels = Int[]
+    if haskey(args,"--antennas")
+        bad_antennas = args["--antennas"]
+    end
+    if haskey(args,"--oldflags")
+        # Add the bad antennas to the list
+        dict = JSON.parsefile(args["--oldflags"])
+        old_bad_antennas = Vector{Int}(dict["bad_antennas"])
+        bad_antennas = unique([bad_antennas;old_bad_antennas])
+        old_bad_channels = Vector{Int}(dict["bad_channels"])
+        bad_channels = unique([bad_channels;old_bad_channels])
+    end
+    bad_channels = flag!(ms_list,bad_antennas=bad_antennas,bad_channels=bad_channels)
+    if haskey(args,"--output")
+        output = Dict("bad_antennas" => bad_antennas,
+                      "bad_channels" => bad_channels)
+        open(args["--output"],"w") do file
+            JSON.print(file,output)
+        end
+    end
     nothing
 end
 
@@ -39,7 +61,9 @@ function clearflags!(ms::Table)
     freq  = spw["CHAN_FREQ",1]
     Nfreq = length(freq)
     flags = zeros(Bool,4,Nfreq,N)
+    row_flags = zeros(Bool,N)
     ms["FLAG"] = flags
+    ms["FLAG_ROW"] = row_flags
     flags
 end
 
@@ -51,10 +75,13 @@ end
 
 flag!(ms::Table) = flag!([ms])
 
-function flag!(ms_list::Vector{Table};bad_antennas::Vector{Int}=Int[])
-    @time channel_flags = flag_channels(ms_list,bad_antennas)
-    @time apply_flags!(ms_list,channel_flags,bad_antennas)
-    nothing
+function flag!(ms_list::Vector{Table};
+               bad_antennas::Vector{Int}=Int[],
+               bad_channels::Vector{Int}=Int[])
+    channel_flags = flag_channels(ms_list,bad_antennas)
+    channel_flags[bad_channels] = true
+    apply_flags!(ms_list,channel_flags,bad_antennas)
+    find(channel_flags)
 end
 
 function flag_channels(ms_list::Vector{Table},bad_antennas=Int[])
