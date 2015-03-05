@@ -32,11 +32,12 @@ function createms()
     table[kw"SPECTRAL_WINDOW"] = "Table: $name/SPECTRAL_WINDOW"
     table["ANTENNA1"] = ant1-1
     table["ANTENNA2"] = ant2-1
+    table["FLAG"] = zeros(Bool,4,Nfreq,Nbase)
 
     name,table
 end
 
-# Clear flags
+# clearflags
 function test_clearflags()
     name,ms = createms()
 
@@ -50,26 +51,30 @@ function test_clearflags()
 end
 test_clearflags()
 
-# Antenna flags
-function test_antenna_flags()
+# flag
+function test_flags()
     name,ms = createms()
 
     # Generate bad data
-    bad_antennas = [8:8:Nant;]
+    bad_antennas = 8:8:Nant
+    bad_channels = 20:20:Nfreq
+
     data = Array{Complex64}(4,Nfreq,Nbase)
-    data[:] = 1.0 + randn()
-    for α = 1:Nbase
-        if ant1[α] in bad_antennas && ant2[α] in bad_antennas
-            data[:,:,α] *= 100.0
-        elseif ant1[α] in bad_antennas || ant2[α] in bad_antennas
-            data[:,:,α] *= 10.0
-        end
-    end
+    rand!(data)
+    data[:,bad_channels,:] *= 100.0
     ms["DATA"] = data
 
     # Test
-    autos = MLPFlagger.getcorrs([ms])
-    @test find(MLPFlagger.flag_antennas(autos)) == bad_antennas
+    flag!([ms],bad_antennas=[bad_antennas...])
+    flags = ms["FLAG"]
+    for α = 1:Nbase
+        if ant1[α] in bad_antennas || ant2[α] in bad_antennas
+            @test all(flags[:,:,α])
+        end
+    end
+    for β in bad_channels
+        @test all(flags[:,β,:])
+    end
 end
-test_antenna_flags()
+test_flags()
 

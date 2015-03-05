@@ -43,48 +43,29 @@ function clearflags!(ms::Table)
     flags
 end
 
+function clearflags!(ms_list::Vector{Table})
+    for ms in ms_list
+        clearflags!(ms)
+    end
+end
+
 flag!(ms::Table) = flag!([ms])
 
-function flag!(ms_list::Vector{Table})
-    corrs = getcorrs(ms_list)
-    antenna_flags = flag_antennas(corrs)
-    channel_flags = flag_channels(autos,antenna_flags)
-    apply_antenna_flags!(ms,antenna_flags)
-    apply_channel_flags!(ms,channel_flags)
+function flag!(ms_list::Vector{Table};bad_antennas::Vector{Int}=Int[])
+    @time channel_flags = flag_channels(ms_list,bad_antennas)
+    @time apply_flags!(ms_list,channel_flags,bad_antennas)
     nothing
 end
 
-@doc """
-Derive a list of antennas to flag.
-""" ->
-function flag_antennas(corrs)
-    reduction = squeeze(median(abs2(corrs),(1,2)),(1,2))
-    λ,g = eigs(reduction,nev=1,which=:LM,ritzvec=true)
-    antenna_amplitude = sqrt(λ[1])*abs(g)
-    m0 = median(antenna_amplitude)
-    m2 = median((antenna_amplitude-m0).^2)
-    σ = sqrt(m2)
-    flags = squeeze(abs(antenna_amplitude-m0) .> 4σ,2)
-
-    figure(1); clf()
-    plot(antenna_amplitude,"ko")
-    axhline(m0,color="r")
-    axhline(m0+σ,color="r",linestyle="--")
-    axhline(m0-σ,color="r",linestyle="--")
-
-    flags
-end
-
-function flag_channels(corrs,antenna_flags)
-    af = !antenna_flags
-    chans = convert(Vector{Float64},squeeze(median(abs(corrs[:,:,af,af]),(1,3,4)),(1,3,4)))
-    x = linspace(0,1,length(chans))
+function flag_channels(ms_list::Vector{Table},bad_antennas=Int[])
+    spec = getspec(ms_list,bad_antennas) # (this dominates the run time)
+    x = linspace(0,1,length(spec))
 
     # Flag the really strong stuff first
-    m0 = median(chans)
-    m2 = median((chans-m0).^2)
+    m0 = median(spec)
+    m2 = median((spec-m0).^2)
     σ = sqrt(m2)
-    flags = (chans-m0) .> 5σ
+    flags = (spec-m0) .> 5σ
 
     # Now fit a splines
     k_schedule = [1,1,1,1,1,3,3,3,3,3]
@@ -93,61 +74,68 @@ function flag_channels(corrs,antenna_flags)
     for i = 1:Niter
         k = k_schedule[i]
         s = s_schedule[i]
-        spline = Spline1D(x[!flags],chans[!flags],k=k,s=s*sum(chans[!flags].^2))
+        spline = Spline1D(x[!flags],spec[!flags],k=k,s=s*sum(spec[!flags].^2))
         smoothed = evaluate(spline,x)
 
-        m2 = median((chans-smoothed).^2)
+        m2 = median((spec-smoothed).^2)
         σ = sqrt(m2)
-        flags = (chans-smoothed) .> 5σ
+        flags = (spec-smoothed) .> 5σ
     end
     flags
 end
 
-function apply_antenna_flags!(ms::Table,antenna_flags)
-    N = numrows(ms)
-    ant1 = ms["ANTENNA1"] + 1
-    ant2 = ms["ANTENNA2"] + 1
-    flags = ms["FLAG"]
-    for α = 1:N
-        if antenna_flags[ant1[α]] || antenna_flags[ant2[α]]
-            flags[:,:,α] = true
-        end
-    end
-    ms["FLAG"] = flags
-    flags
-end
-
-function apply_channel_flags!(ms::Table,channel_flags)
-    N = length(channel_flags)
-    flags = ms["FLAG"]
-    for β = 1:N
-        if channel_flags[β]
-            flags[:,β,:] = true
-        end
-    end
-    ms["FLAG"] = flags
-    flags
-end
-
-function getcorrs(ms_list::Vector{Table})
+function getspec(ms_list::Vector{Table},bad_antennas)
     Nms   = length(ms_list)
     Nbase = numrows(ms_list[1])
     Nant  = div(isqrt(1+8Nbase)-1,2)
     Nchan = length(Table(ms_list[1][kw"SPECTRAL_WINDOW"])["CHAN_FREQ"])
 
-    corrs = zeros(Complex64,4,Nms*Nchan,Nant,Nant)
+    spec = zeros(Float64,Nms*Nchan)
     for (β,ms) in enumerate(ms_list)
         ant1 = ms["ANTENNA1"] + 1
         ant2 = ms["ANTENNA2"] + 1
-        data = ms["DATA"]
-
+        data = abs(permutedims(ms["DATA"],(2,1,3)))
         for α = 1:Nbase
-            abs(ant1[α] - ant2[α]) ≤ 0 && continue
-            corrs[:,(β-1)*Nchan+1:β*Nchan,ant1[α],ant2[α]] = data[:,:,α]
-            corrs[:,(β-1)*Nchan+1:β*Nchan,ant2[α],ant1[α]] = conj(data[:,:,α])
+            (ant1[α] in bad_antennas || ant2[α] in bad_antennas) && continue
+            spec[(β-1)*Nchan+1:β*Nchan] += sum(slice(data,:,:,α),2)
         end
     end
-    corrs
+    spec
+end
+
+################################################################################
+# Apply flags
+
+function apply_flags!(ms::Table,channel_flags,bad_antennas)
+    ant1 = ms["ANTENNA1"] + 1
+    ant2 = ms["ANTENNA2"] + 1
+    flags = ms["FLAG"]
+    apply_antenna_flags!(flags,ant1,ant2,bad_antennas)
+    apply_channel_flags!(flags,channel_flags)
+    ms["FLAG"] = flags
+end
+
+function apply_flags!(ms_list::Vector{Table},channel_flags,bad_antennas)
+    N = div(length(channel_flags),length(ms_list))
+    for i = 1:length(ms_list)
+        apply_flags!(ms_list[i],sub(channel_flags,(i-1)*N+1:i*N),bad_antennas)
+    end
+end
+
+function apply_antenna_flags!(flags,ant1,ant2,bad_antennas)
+    for α = 1:size(flags,3)
+        if ant1[α] in bad_antennas || ant2[α] in bad_antennas
+            flags[:,:,α] = true
+        end
+    end
+end
+
+function apply_channel_flags!(flags,channel_flags)
+    for β = 1:size(flags,2)
+        if channel_flags[β]
+            flags[:,β,:] = true
+        end
+    end
 end
 
 end
