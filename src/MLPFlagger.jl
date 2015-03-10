@@ -22,7 +22,9 @@ using Dierckx
 using JSON
 
 function run_clearflags(args)
-    clearflags!(Table(args["--input"]))
+    for file in args["--input"]
+        clearflags!(Table(ascii(file)))
+    end
     nothing
 end
 
