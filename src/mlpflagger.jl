@@ -33,26 +33,38 @@ push!(CLI.commands,Command("flag","Flag bad antennas and channels with anomalous
 CLI.options["clearflags"] = [
     Option("--input","""
         A list of measurement sets that will have their flags cleared.""",
-        UTF8String,true,1,Inf)]
+        T=UTF8String,
+        required=true,
+        min=1,
+        max=Inf)]
 CLI.options["flag"] = [
     Option("--input","""
         A list of measurement sets to flag. The measurement sets should represent
         different spectral windows from the same time integration.""",
-        UTF8String,true,1,Inf),
+        T=UTF8String,
+        required=true,
+        min=1,
+        max=Inf),
     Option("--antennas","""
         A list of bad antennas that should be flagged. Antennas are numbered
         starting from 1.""",
-        Int,false,1,Inf),
+        T=Int,
+        min=1,
+        max=Inf),
     Option("--output","""
         A JSON file that will be written to with a record of the antenna and channel
         flags applied to this list of measurement sets. This allows these flags
         to easily be applied elsewhere.""",
-        UTF8String,false,1,1),
+        T=UTF8String,
+        min=1,
+        max=1),
     Option("--oldflags","""
         This is the name of a file previously written to with the --output option.
         The antenna and channel flags contained within this file will be applied
         to the current list of measurement sets.""",
-        UTF8String,false,1,1)]
+        T=UTF8String,
+        min=1,
+        max=1)]
 
 import MLPFlagger
 
