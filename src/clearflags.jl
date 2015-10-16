@@ -13,9 +13,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-@doc """
+"""
+    clearflags!(ms::Table)
+
 Clear all of the flags in the measurement set.
-""" ->
+"""
 function clearflags!(ms::Table)
     N = numrows(ms)
     spw = Table(ms[kw"SPECTRAL_WINDOW"])
@@ -28,8 +30,13 @@ function clearflags!(ms::Table)
     flags
 end
 
-function clearflags!(ms_list::Vector{Table})
-    for ms in ms_list
+"""
+    clearflags!(mslist::Vector{Table})
+
+Clear all of the flags in the list of measurement sets.
+"""
+function clearflags!(mslist::Vector{Table})
+    for ms in mslist
         clearflags!(ms)
     end
 end
