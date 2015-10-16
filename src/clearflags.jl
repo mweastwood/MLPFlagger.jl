@@ -13,23 +13,26 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-@doc """
+"""
+    clearflags!(ms::MeasurementSet)
+
 Clear all of the flags in the measurement set.
-""" ->
-function clearflags!(ms::Table)
-    N = numrows(ms)
-    spw = Table(ms[kw"SPECTRAL_WINDOW"])
-    freq  = spw["CHAN_FREQ",1]
-    Nfreq = length(freq)
-    flags = zeros(Bool,4,Nfreq,N)
-    row_flags = zeros(Bool,N)
-    ms["FLAG"] = flags
-    ms["FLAG_ROW"] = row_flags
+"""
+function clearflags!(ms::MeasurementSet)
+    flags = zeros(Bool,4,ms.Nfreq,ms.Nbase)
+    row_flags = zeros(Bool,ms.Nbase)
+    ms.table["FLAG"] = flags
+    ms.table["FLAG_ROW"] = row_flags
     flags
 end
 
-function clearflags!(ms_list::Vector{Table})
-    for ms in ms_list
+"""
+    clearflags!(mslist::Vector{MeasurementSet})
+
+Clear all of the flags in the list of measurement sets.
+"""
+function clearflags!(mslist::Vector{MeasurementSet})
+    for ms in mslist
         clearflags!(ms)
     end
 end

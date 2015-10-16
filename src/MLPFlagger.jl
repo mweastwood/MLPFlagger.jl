@@ -15,47 +15,22 @@
 
 module MLPFlagger
 
-export clearflags!, flag!
+export applyflags!, clearflags!
 
-using CasaCore.Tables
-using Dierckx
-using JSON
+export AntennaFlags
+export low_power_antennas
 
+export ChannelFlags
+export bright_narrow_rfi
+
+using TTCal
+export MeasurementSet
+
+include("fundamentals.jl")
 include("clearflags.jl")
-include("flag.jl")
-
-function run_clearflags(args)
-    for file in args["--input"]
-        clearflags!(Table(ascii(file)))
-    end
-    nothing
-end
-
-function run_flag(args)
-    ms_list = [Table(ascii(file)) for file in args["--input"]]
-    bad_antennas = Int[]
-    bad_channels = Int[]
-    if haskey(args,"--antennas")
-        bad_antennas = args["--antennas"]
-    end
-    if haskey(args,"--oldflags")
-        # Add the bad antennas to the list
-        dict = JSON.parsefile(args["--oldflags"])
-        old_bad_antennas = Vector{Int}(dict["bad_antennas"])
-        bad_antennas = unique([bad_antennas;old_bad_antennas])
-        old_bad_channels = Vector{Int}(dict["bad_channels"])
-        bad_channels = unique([bad_channels;old_bad_channels])
-    end
-    bad_channels = flag!(ms_list,bad_antennas=bad_antennas,bad_channels=bad_channels)
-    if haskey(args,"--output")
-        output = Dict("bad_antennas" => bad_antennas,
-                      "bad_channels" => bad_channels)
-        open(args["--output"],"w") do file
-            JSON.print(file,output)
-        end
-    end
-    nothing
-end
+include("antennas.jl")
+include("channels.jl")
+include("calibrations.jl")
 
 end
 
