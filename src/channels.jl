@@ -76,21 +76,20 @@ function bright_narrow_rfi(ms)
 end
 
 doc"""
-    applyflags!(ms::Table, flags::ChannelFlags)
+    applyflags!(ms::MeasurementSet, flags::ChannelFlags)
 
 Apply the flags to the measurement set.
 
 The flags are written to the "FLAG" column of the
 measurement set.
 """
-function applyflags!(ms::Table,flags::ChannelFlags)
-    Nfreq = length(flags.flags)
-    msflags = ms["FLAG"]
-    for β = 1:Nfreq
+function applyflags!(ms::MeasurementSet,flags::ChannelFlags)
+    msflags = ms.table["FLAG"]
+    for β = 1:ms.Nfreq
         flags[β] || continue
         msflags[:,β,:] = true
     end
-    ms["FLAG"] = msflags
+    ms.table["FLAG"] = msflags
     msflags
 end
 

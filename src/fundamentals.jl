@@ -42,52 +42,32 @@ function flag_1d!(signal,flags,sigmas = 20)
     flags[idx] = true
 end
 
-function autos(ms::Table)
-    antenna_table = ms[kw"ANTENNA"] |> Table
-    spw_table     = ms[kw"SPECTRAL_WINDOW"] |> Table
-    Nbase = numrows(ms)
-    Nant  = numrows(antenna_table)
-    Nfreq = length(spw_table["CHAN_FREQ",1])
-    unlock(antenna_table)
-    unlock(spw_table)
-
-    ant1 = ms["ANTENNA1"] + 1
-    ant2 = ms["ANTENNA2"] + 1
-    out = zeros(Nfreq,Nant,2)
-    for α = 1:Nbase
-        ant1[α] == ant2[α] || continue
-        data = ms["DATA",α]
-        for β = 1:Nfreq
-            out[β,ant1[α],1] = real(data[1,β]) # xx
-            out[β,ant1[α],2] = real(data[4,β]) # yy
+function autos(ms::MeasurementSet)
+    out = zeros(ms.Nfreq,ms.Nant,2)
+    for α = 1:ms.Nbase
+        ms.ant1[α] == ms.ant2[α] || continue
+        data = ms.table["DATA",α]
+        for β = 1:ms.Nfreq
+            out[β,ms.ant1[α],1] = real(data[1,β]) # xx
+            out[β,ms.ant1[α],2] = real(data[4,β]) # yy
         end
     end
     out
 end
 
-function autoflags(ms::Table)
-    antenna_table = ms[kw"ANTENNA"] |> Table
-    spw_table     = ms[kw"SPECTRAL_WINDOW"] |> Table
-    Nbase = numrows(ms)
-    Nant  = numrows(antenna_table)
-    Nfreq = length(spw_table["CHAN_FREQ",1])
-    unlock(antenna_table)
-    unlock(spw_table)
-
-    ant1 = ms["ANTENNA1"] + 1
-    ant2 = ms["ANTENNA2"] + 1
-    out = zeros(Bool,Nfreq,Nant,2)
-    for α = 1:Nbase
-        ant1[α] == ant2[α] || continue
-        rowflag = ms["FLAG_ROW",α]
+function autoflags(ms::MeasurementSet)
+    out = zeros(Bool,ms.Nfreq,ms.Nant,2)
+    for α = 1:ms.Nbase
+        ms.ant1[α] == ms.ant2[α] || continue
+        rowflag = ms.table["FLAG_ROW",α]
         if rowflag
-            out[:,ant1[α],:] = true
+            out[:,ms.ant1[α],:] = true
             continue
         end
-        flags = ms["FLAG",α]
-        for β = 1:Nfreq
-            out[β,ant1[α],1] = flags[1,β] # xx
-            out[β,ant1[α],2] = flags[4,β] # yy
+        flags = ms.table["FLAG",α]
+        for β = 1:ms.Nfreq
+            out[β,ms.ant1[α],1] = flags[1,β] # xx
+            out[β,ms.ant1[α],2] = flags[4,β] # yy
         end
     end
     out

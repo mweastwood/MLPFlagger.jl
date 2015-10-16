@@ -54,11 +54,11 @@ function Base.show(io::IO,flags::AntennaFlags)
 end
 
 """
-    low_power_antennas(ms::Table)
+    low_power_antennas(ms::MeasurementSet)
 
 Search for antennas that appear to have very low power.
 """
-function low_power_antennas(ms::Table)
+function low_power_antennas(ms::MeasurementSet)
     data  = autos(ms)
     power = median(data,1) |> log10
     power = squeeze(power,1)
@@ -68,41 +68,38 @@ function low_power_antennas(ms::Table)
 end
 
 doc"""
-    applyflags!(ms::Table, flags::AntennaFlags)
+    applyflags!(ms::MeasurementSet, flags::AntennaFlags)
 
 Apply the flags to the measurement set.
 
 The flags are written to the "FLAG" column of the
 measurement set.
 """
-function applyflags!(ms::Table,flags::AntennaFlags)
-    Nbase = numrows(ms)
-    ant1  = ms["ANTENNA1"] + 1
-    ant2  = ms["ANTENNA2"] + 1
-    msflags = ms["FLAG"]
-    for α = 1:Nbase
-        if flags[ant1[α],1]
+function applyflags!(ms::MeasurementSet,flags::AntennaFlags)
+    msflags = ms.table["FLAG"]
+    for α = 1:ms.Nbase
+        if flags[ms.ant1[α],1]
             # flag xx and xy
             msflags[1,:,α] = true
             msflags[2,:,α] = true
         end
-        if flags[ant1[α],2]
+        if flags[ms.ant1[α],2]
             # flag yx and yy
             msflags[3,:,α] = true
             msflags[4,:,α] = true
         end
-        if flags[ant2[α],1]
+        if flags[ms.ant2[α],1]
             # flag xx and yx
             msflags[1,:,α] = true
             msflags[3,:,α] = true
         end
-        if flags[ant2[α],2]
+        if flags[ms.ant2[α],2]
             # flag xy and yy
             msflags[2,:,α] = true
             msflags[4,:,α] = true
         end
     end
-    ms["FLAG"] = msflags
+    ms.table["FLAG"] = msflags
     msflags
 end
 
