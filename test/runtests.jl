@@ -87,5 +87,7 @@ function createms(Nant,Nfreq)
 end
 
 srand(123)
+include("clearflags.jl")
 include("antennas.jl")
+include("channels.jl")
 
