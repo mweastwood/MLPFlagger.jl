@@ -70,7 +70,7 @@ end
 doc"""
     applyflags!(ms::MeasurementSet, flags::AntennaFlags)
 
-Apply the flags to the measurement set.
+Apply the antenna flags to the measurement set.
 
 The flags are written to the "FLAG" column of the
 measurement set.

@@ -78,7 +78,7 @@ end
 doc"""
     applyflags!(ms::MeasurementSet, flags::ChannelFlags)
 
-Apply the flags to the measurement set.
+Apply the channel flags to the measurement set.
 
 The flags are written to the "FLAG" column of the
 measurement set.

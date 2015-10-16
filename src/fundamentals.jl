@@ -36,7 +36,7 @@ end
 function flag_1d!(signal,flags,sigmas = 20)
     x = signal[!flags]
     μ = median(x)
-    σ = abs2(x-μ) |> median |> sqrt
+    σ = max(abs2(x-μ) |> median |> sqrt,1e-5)
     threshold = μ+sigmas*σ
     idx = signal .> threshold
     flags[idx] = true
