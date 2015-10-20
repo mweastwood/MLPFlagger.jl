@@ -24,7 +24,6 @@ export ChannelFlags
 export bright_narrow_rfi
 
 using TTCal
-export MeasurementSet
 
 include("fundamentals.jl")
 include("clearflags.jl")

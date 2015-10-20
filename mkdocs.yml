@@ -1,0 +1,11 @@
+site_name: MLPFlagger
+site_url: https://github.com/mweastwood/MLPFlagger.jl
+repo_url: https://github.com/mweastwood/MLPFlagger.jl
+site_description: A flagging routine developed for the OVRO LWA.
+site_author: Michael Eastwood
+
+pages:
+    - Home: index.md
+    - API: api.md
+theme: readthedocs
+

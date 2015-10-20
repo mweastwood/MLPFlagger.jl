@@ -49,7 +49,7 @@ function nonlinear_phase(cal::GainCalibration)
             flag_1d!(abs(ϕ-fit),f,schedule[i])
         end
     end
-    flags
+    GainCalibrationFlags(flags)
 end
 
 doc"""
