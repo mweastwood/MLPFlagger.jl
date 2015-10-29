@@ -38,8 +38,9 @@ function nonlinear_phase(cal::GainCalibration)
     flags = copy(cal.flags)
     linear_fit_matrix = [1:TTCal.Nfreq(cal) ones(TTCal.Nfreq(cal))]
     for pol = 1:2, ant = 1:TTCal.Nant(cal)
-        f = slice(    flags,ant,:,pol)
-        g = slice(cal.gains,ant,:,pol)
+        f = slice(    flags,pol,ant,:)
+        g = slice(cal.gains,pol,ant,:)
+        all(f) && continue
         ϕ = angle(g)
         unwrap!(ϕ,f)
         schedule = [6,5,4]
@@ -100,9 +101,9 @@ doc"""
 Apply the set of flags to the gain calibration.
 """
 function applyflags!(cal::GainCalibration,flags::GainCalibrationFlags)
-    for pol = 1:2, β = 1:TTCal.Nfreq(cal), ant = 1:TTCal.Nant(cal)
-        if flags[ant,β,pol]
-            cal.flags[ant,β,pol] = true
+    for β = 1:TTCal.Nfreq(cal), ant = 1:TTCal.Nant(cal), pol = 1:2
+        if flags[pol,ant,β]
+            cal.flags[pol,ant,β] = true
         end
     end
     GainCalibrationFlags(cal.flags)
