@@ -13,59 +13,67 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-function smooth_1d(signal,flags,width = 11)
-    isodd(width) || error("width must be odd")
-    chop = div(width-1,2)
+"""
+    Nfreq(ms::CasaCore.Tables.Table)
 
-    σ = width/3
-    x = linspace(-width/2,width/2,width)
-    kernel = zeros(length(x))
-    for i in eachindex(x,kernel)
-        kernel[i] = exp(-x[i]^2/σ^2) * (width/2-x[i]) * (x[i]+width/2)
-    end
-
-    window = !flags
-    convolved = conv(window.*signal,kernel)
-    convolved = convolved[1+chop:end-chop]
-    normalization = conv(window,kernel)
-    normalization = normalization[1+chop:end-chop]
-    convolved = convolved ./ normalization
-    convolved
+Returns the number of frequency channels in the measurement set.
+"""
+function Nfreq(ms::Table)
+    spw = Table(ms[kw"SPECTRAL_WINDOW"])
+    ν = spw["CHAN_FREQ",1]
+    unlock(spw)
+    length(ν)
 end
 
-function flag_1d!(signal,flags,sigmas = 20)
-    x = signal[!flags]
-    μ = median(x)
-    σ = max(abs2(x-μ) |> median |> sqrt,1e-5)
-    threshold = μ+sigmas*σ
-    idx = signal .> threshold
-    flags[idx] = true
+"""
+    Nant(ms::CasaCore.Tables.Table)
+
+Returns the number of antennas in the measurement set.
+"""
+function Nant(ms::Table)
+    antenna = Table(ms[kw"ANTENNA"])
+    N = Tables.numrows(antenna)
+    unlock(antenna)
+    Int(N)
 end
 
-function autos(ms::MeasurementSet)
-    out = zeros(ms.Nfreq,ms.Nant,2)
-    for α = 1:ms.Nbase
-        ms.ant1[α] == ms.ant2[α] || continue
-        data = ms.table["DATA",α]
-        for β = 1:ms.Nfreq
-            out[β,ms.ant1[α],1] = real(data[1,β]) # xx
-            out[β,ms.ant1[α],2] = real(data[4,β]) # yy
+"""
+    Nbase(ms::CasaCore.Tables.Table)
+
+Returns the number of baselines in the measurement set.
+"""
+function Nbase(ms::Table)
+    Int(Tables.numrows(ms))
+end
+
+function autos(ms::Table)
+    ant1 = ms["ANTENNA1"] + 1
+    ant2 = ms["ANTENNA2"] + 1
+    out = zeros(Nfreq(ms), Nant(ms), 2)
+    for α = 1:Nbase(ms)
+        ant1[α] == ant2[α] || continue
+        data = ms["DATA",α]
+        for β = 1:size(out, 1)
+            out[β,ant1[α],1] = real(data[1,β]) # xx
+            out[β,ant1[α],2] = real(data[4,β]) # yy
         end
     end
     out
 end
 
-function autoflags(ms::MeasurementSet)
-    out = zeros(Bool,ms.Nfreq,ms.Nant,2)
-    for α = 1:ms.Nbase
-        ms.ant1[α] == ms.ant2[α] || continue
-        rowflag = ms.table["FLAG_ROW",α]
+function autoflags(ms::Table)
+    ant1 = ms["ANTENNA1"] + 1
+    ant2 = ms["ANTENNA2"] + 1
+    out = fill(false, Nfreq(ms), Nant(ms), 2)
+    for α = 1:Nbase(ms)
+        ant1[α] == ant2[α] || continue
+        rowflag = ms["FLAG_ROW",α]
         if rowflag
-            out[:,ms.ant1[α],:] = true
+            out[:,ant1[α],:] = true
             continue
         end
-        flags = ms.table["FLAG",α]
-        for β = 1:ms.Nfreq
+        flags = ms["FLAG",α]
+        for β = 1:size(out, 1)
             out[β,ms.ant1[α],1] = flags[1,β] # xx
             out[β,ms.ant1[α],2] = flags[4,β] # yy
         end

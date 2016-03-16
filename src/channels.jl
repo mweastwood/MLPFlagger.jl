@@ -13,83 +13,142 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-doc"""
-    immutable ChannelFlags
+"""
+    ChannelFlags
 
-A container that holds a length $N$ vector of flags where
-$N$ is the number of frequency channels.
+A container that holds a list of frequency channel flags.
+Each antenna receives its own set of associated flags.
+
+    ChannelFlags(Nfreq, Nant)
+
+Create an empty set of channel flags for `Nfreq` frequency channels
+and `Nant` antennas.
 """
 immutable ChannelFlags
-    flags::Vector{Bool}
+    flags::Array{Bool,3}
+    function ChannelFlags(flags)
+        size(flags, 3) == 2 || error("third dimension must correspond to 2 polarizations")
+        new(flags)
+    end
 end
 
-Base.getindex(flags::ChannelFlags,I...) = flags.flags[I...]
-Base.setindex!(flags::ChannelFlags,x,I...) = flags.flags[I...] = x
+function ChannelFlags(Nfreq::Int, Nant::Int)
+    flags = fill(false, Nfreq, Nant , 2)
+    ChannelFlags(flags)
+end
 
-function Base.show(io::IO,flags::ChannelFlags)
-    print(io,"Flagged channels: [")
-    channels = UTF8String[]
-    for β = 1:length(flags.flags)
-        flags[β] || continue
-        push!(channels,string(β))
+==(lhs::ChannelFlags, rhs::ChannelFlags) = lhs.flags == rhs.flags
+
+getindex(flags::ChannelFlags, I...) = flags.flags[I...]
+setindex!(flags::ChannelFlags, x, I...) = flags.flags[I...] = x
+
+function Base.show(io::IO, flags::ChannelFlags)
+    fraction_flagged = sum(flags.flags, (2, 3)) / (size(flags.flags, 2) * size(flags.flags, 3))
+    channels = find(fraction_flagged .≥ 0.25)
+    print(io, "Flagged channels: [")
+    for β = 1:length(channels)
+        color = :white
+        fraction_flagged[channels[β]]  ≥ 0.5 && (color = :red)
+        fraction_flagged[channels[β]] == 1.0 && (color = :blue)
+        print_with_color(color, io, string(channels[β]))
+        β == length(channels) || print(io, ", ")
     end
-    print(io,join(channels,", "))
-    print(io,"]")
+    print(io, "]\n")
+    print(io, "          Legend: ")
+    print_with_color(:white, io, ">25% flagged"); print(io, ", ")
+    print_with_color(  :red, io, ">50% flagged"); print(io, ", ")
+    print_with_color( :blue, io, "100% flagged"); print(io, "\n")
 end
 
 """
-    bright_narrow_rfi(ms)
+    bright_narrow_rfi(ms::CasaCore.Tables.Table)
 
 Find RFI that is narrowband and very bright.
 This is the kind of RFI that is likely to make a frequency channel
 completely useless.
+
+The criterion for a channel to be flagged is
+`power > threshold * mad(power)`, where `power` is the power in
+a sincle frequency channel and `mad` is the mean absolute deviation.
 """
-function bright_narrow_rfi(ms)
-    data  = MLPFlagger.autos(ms)
-    flags = MLPFlagger.autoflags(ms)
-    Nfreq = size(data,1)
-    Nant  = size(data,2)
-
-    # Compute an array averaged sky spectrum after doing
-    # a very rough gain calibration
-    count = zeros(Int,Nfreq)
-    spectrum = zeros(Nfreq)
-    for pol = 1:2, ant = 1:Nant
-        f = slice(flags,:,ant,pol) # flags
-        g = all(f)? 0.0 : median(data[!f,ant,pol]) # rough gain
-        for β = 1:Nfreq
-            f[β] && continue
-            count[β] += 1
-            spectrum[β] += data[β,ant,pol] / g
-        end
+function bright_narrow_rfi(ms, threshold)
+    data  = autos(ms)
+    flags = ChannelFlags(Nfreq(ms), Nant(ms))
+    for ant = 1:Nant(ms), pol = 1:2
+        flags[:, ant, pol] = bright_narrow_rfi_one_antenna(slice(data, :, ant, pol), threshold)
     end
-    spectrum = spectrum ./ count
-
-    # Find the outliers on the combined spectrum
-    channel_flags = zeros(Bool,Nfreq)
-    schedule = [11,21,31] # steadily increase the smoothing length
-    for i = 1:length(schedule)
-        smoothed = MLPFlagger.smooth_1d(spectrum,channel_flags,schedule[i])
-        MLPFlagger.flag_1d!(spectrum-smoothed,channel_flags,5)
-    end
-    ChannelFlags(channel_flags)
+    println(flags)
+    flags
 end
 
-doc"""
-    applyflags!(ms::MeasurementSet, flags::ChannelFlags)
+function bright_narrow_rfi_one_antenna(data, threshold)
+    Nfreq = length(data)
+    ν = collect(1:Nfreq)
+    flags = fill(false, Nfreq)
+    # The width parameter here defines the spacing of the knots in the smoothing
+    # spline. If the knots are more finely spaced the smoothing spline will trace
+    # the data more closely but it will not smooth out the RFI. Therefore we
+    # define a schedule where the knots are spaced further and further apart to
+    # make sure we capture as much RFI as possible. On the final iteration we
+    # use a very fine spacing to help avoid errors where legitimate parts of the
+    # band are flagged just because the smoothing spline does not model that part
+    # of the band very well.
+    for width in (2, 4, 8, 16, 32, 2)
+        spline = Spline1D(ν[!flags], data[!flags], ν[!flags][2:width:end-1], k=1)
+        model  = spline(ν) |> abs
+        # In comparing the difference of the data to the model, we normalize by the
+        # square root of the model to flatten the noise characteristics as a function
+        # of frequency.
+        δ = (data - model) ./ sqrt(model)
+        # Calculate the mean absolute deviation of the data from the model. Note that
+        # this is less sensitive to outliers (ie. RFI) than the standard deviation.
+        # Hence we prefer the mean absolute deviation to the standard devation here.
+        mad = mean(abs(δ[!flags]))
+        # Now we flag all the data that falls above the threshold. Note that we don't
+        # flag data that deviates from the model in the negative direction because RFI
+        # should be a positive deviation. We also update all of the flags at each
+        # iteration because the model should improve on each iteration and we may have
+        # made a mistake on a previous iteration.
+        flags = δ .> threshold * mad
+    end
+    flags
+end
+
+"""
+    applyflags!(ms::CasaCore.Tables.Table, flags::ChannelFlags)
 
 Apply the channel flags to the measurement set.
 
 The flags are written to the "FLAG" column of the
 measurement set.
 """
-function applyflags!(ms::MeasurementSet,flags::ChannelFlags)
-    msflags = ms.table["FLAG"]
-    for β = 1:ms.Nfreq
-        flags[β] || continue
-        msflags[:,β,:] = true
+function applyflags!(ms::Table, flags::ChannelFlags)
+    msflags = ms["FLAG"]
+    ant1 = ms["ANTENNA1"] + 1
+    ant2 = ms["ANTENNA2"] + 1
+    @inbounds for α = 1:size(msflags, 3), β = 1:size(msflags, 2)
+        if flags[β,ant1[α],1]
+            # flag xx and xy
+            msflags[1,β,α] = true
+            msflags[2,β,α] = true
+        end
+        if flags[β,ant1[α],2]
+            # flag yx and yy
+            msflags[3,β,α] = true
+            msflags[4,β,α] = true
+        end
+        if flags[β,ant2[α],1]
+            # flag xx and yx
+            msflags[1,β,α] = true
+            msflags[3,β,α] = true
+        end
+        if flags[β,ant2[α],2]
+            # flag xy and yy
+            msflags[2,β,α] = true
+            msflags[4,β,α] = true
+        end
     end
-    ms.table["FLAG"] = msflags
+    ms["FLAG"] = msflags
     msflags
 end
 

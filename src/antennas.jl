@@ -14,37 +14,36 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 doc"""
-    immutable AntennaFlags
+    AntennaFlags
 
-A container that holds a $N \times 2$ array of flags where $N$ is the
-number of antennas. Each row of the array gives the flags for the
-$x$ and $y$ polarizations respectively.
+A container that holds a list of antenna flags.
+
+    AntennaFlags(Nant)
+
+Create an empty set of antenna flags for `Nant` antennas.
 """
 immutable AntennaFlags
-    flags::Matrix{Bool}
+    flags::Array{Bool,2}
     function AntennaFlags(flags)
-        size(flags,2) == 2 || error("second dimension must correspond to 2 polarizations")
+        size(flags, 2) == 2 || error("second dimension must correspond to 2 polarizations")
         new(flags)
     end
 end
 
-"""
-    AntennaFlags(Nant::Int)
-
-Create an empty set of antenna flags for `Nant` antennas.
-"""
 function AntennaFlags(Nant::Int)
-    flags = zeros(Bool,Nant,2)
+    flags = fill(false, Nant, 2)
     AntennaFlags(flags)
 end
 
-Base.getindex(flags::AntennaFlags,I...) = flags.flags[I...]
-Base.setindex!(flags::AntennaFlags,x,I...) = flags.flags[I...] = x
+==(lhs::AntennaFlags, rhs::AntennaFlags) = lhs.flags == rhs.flags
 
-function Base.show(io::IO,flags::AntennaFlags)
+getindex(flags::AntennaFlags,I...) = flags.flags[I...]
+setindex!(flags::AntennaFlags,x,I...) = flags.flags[I...] = x
+
+function Base.show(io::IO, flags::AntennaFlags)
     print(io,"Flagged antennas: [")
     ants = UTF8String[]
-    for ant = 1:size(flags.flags,1), pol = 1:2
+    for ant = 1:size(flags.flags, 1), pol = 1:2
         flags[ant,pol] || continue
         xy = pol == 1? "x" : "y"
         push!(ants,"$ant$xy")
@@ -54,52 +53,56 @@ function Base.show(io::IO,flags::AntennaFlags)
 end
 
 """
-    low_power_antennas(ms::MeasurementSet)
+    low_power_antennas(ms::CasaCore.Tables.Table, threshold)
 
-Search for antennas that appear to have very low power.
+Search for antennas that appear to have low power.
+
+The criterion for an antenna to be flagged is
+`power < threshold * median(power)`, where `power` is the
+integrated power in the antenna's autocorrelation spectrum.
 """
-function low_power_antennas(ms::MeasurementSet)
+function low_power_antennas(ms::Table, threshold)
     data  = autos(ms)
-    power = median(data,1) |> log10
-    power = squeeze(power,1)
-    flags = zeros(Bool,size(power))
-    flag_1d!(-power,flags,20)
+    power = squeeze(sum(data, 1), 1)
+    flags = power .< threshold * median(power)
     AntennaFlags(flags)
 end
 
-doc"""
-    applyflags!(ms::MeasurementSet, flags::AntennaFlags)
+"""
+    applyflags!(ms::CasaCore.Tables.Table, flags::AntennaFlags)
 
 Apply the antenna flags to the measurement set.
 
 The flags are written to the "FLAG" column of the
 measurement set.
 """
-function applyflags!(ms::MeasurementSet,flags::AntennaFlags)
-    msflags = ms.table["FLAG"]
-    for α = 1:ms.Nbase
-        if flags[ms.ant1[α],1]
+function applyflags!(ms::Table, flags::AntennaFlags)
+    msflags = ms["FLAG"]
+    ant1 = ms["ANTENNA1"] + 1
+    ant2 = ms["ANTENNA2"] + 1
+    @inbounds for α = 1:size(msflags, 3)
+        if flags[ant1[α],1]
             # flag xx and xy
             msflags[1,:,α] = true
             msflags[2,:,α] = true
         end
-        if flags[ms.ant1[α],2]
+        if flags[ant1[α],2]
             # flag yx and yy
             msflags[3,:,α] = true
             msflags[4,:,α] = true
         end
-        if flags[ms.ant2[α],1]
+        if flags[ant2[α],1]
             # flag xx and yx
             msflags[1,:,α] = true
             msflags[3,:,α] = true
         end
-        if flags[ms.ant2[α],2]
+        if flags[ant2[α],2]
             # flag xy and yy
             msflags[2,:,α] = true
             msflags[4,:,α] = true
         end
     end
-    ms.table["FLAG"] = msflags
+    ms["FLAG"] = msflags
     msflags
 end
 

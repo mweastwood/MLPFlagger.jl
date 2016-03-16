@@ -14,26 +14,15 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 """
-    clearflags!(ms::MeasurementSet)
+    clearflags!(ms::CasaCore.Tables.Table)
 
 Clear all of the flags in the measurement set.
 """
-function clearflags!(ms::MeasurementSet)
-    flags = zeros(Bool,4,ms.Nfreq,ms.Nbase)
-    row_flags = zeros(Bool,ms.Nbase)
-    ms.table["FLAG"] = flags
-    ms.table["FLAG_ROW"] = row_flags
-    flags
-end
-
-"""
-    clearflags!(mslist::Vector{MeasurementSet})
-
-Clear all of the flags in the list of measurement sets.
-"""
-function clearflags!(mslist::Vector{MeasurementSet})
-    for ms in mslist
-        clearflags!(ms)
-    end
+function clearflags!(ms::Table)
+    flags     = fill(false, 4, Nfreq(ms), Nbase(ms))
+    row_flags = fill(false, Nbase(ms))
+    ms["FLAG"]     = flags
+    ms["FLAG_ROW"] = row_flags
+    nothing
 end
 

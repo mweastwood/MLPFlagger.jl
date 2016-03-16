@@ -25,13 +25,14 @@ export low_power_antennas
 export ChannelFlags
 export bright_narrow_rfi
 
-using TTCal
+importall Base.Operators
+using CasaCore.Tables
+using Dierckx
 
 include("fundamentals.jl")
 include("clearflags.jl")
 include("antennas.jl")
 include("channels.jl")
-include("calibrations.jl")
 
 end
 
