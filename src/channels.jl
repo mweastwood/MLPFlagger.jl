@@ -39,9 +39,6 @@ end
 
 ==(lhs::ChannelFlags, rhs::ChannelFlags) = lhs.flags == rhs.flags
 
-getindex(flags::ChannelFlags, I...) = flags.flags[I...]
-setindex!(flags::ChannelFlags, x, I...) = flags.flags[I...] = x
-
 function Base.show(io::IO, flags::ChannelFlags)
     fraction_flagged = sum(flags.flags, (2, 3)) / (size(flags.flags, 2) * size(flags.flags, 3))
     channels = find(fraction_flagged .≥ 0.25)
@@ -75,9 +72,8 @@ function bright_narrow_rfi(ms, threshold)
     data  = autos(ms)
     flags = ChannelFlags(Nfreq(ms), Nant(ms))
     for ant = 1:Nant(ms), pol = 1:2
-        flags[:, ant, pol] = bright_narrow_rfi_one_antenna(slice(data, :, ant, pol), threshold)
+        flags.flags[:, ant, pol] = bright_narrow_rfi_one_antenna(slice(data, :, ant, pol), threshold)
     end
-    println(flags)
     flags
 end
 
@@ -126,29 +122,21 @@ function applyflags!(ms::Table, flags::ChannelFlags)
     msflags = ms["FLAG"]
     ant1 = ms["ANTENNA1"] + 1
     ant2 = ms["ANTENNA2"] + 1
-    @inbounds for α = 1:size(msflags, 3), β = 1:size(msflags, 2)
-        if flags[β,ant1[α],1]
-            # flag xx and xy
-            msflags[1,β,α] = true
-            msflags[2,β,α] = true
-        end
-        if flags[β,ant1[α],2]
-            # flag yx and yy
-            msflags[3,β,α] = true
-            msflags[4,β,α] = true
-        end
-        if flags[β,ant2[α],1]
-            # flag xx and yx
-            msflags[1,β,α] = true
-            msflags[3,β,α] = true
-        end
-        if flags[β,ant2[α],2]
-            # flag xy and yy
-            msflags[2,β,α] = true
-            msflags[4,β,α] = true
-        end
-    end
+    applyflags!(msflags, flags, ant1, ant2)
     ms["FLAG"] = msflags
     msflags
+end
+
+function applyflags!(msflags, flags::ChannelFlags, ant1, ant2)
+    for α = 1:size(msflags, 3), β = 1:size(msflags, 2)
+        x1_flag = flags.flags[β,ant1[α],1]
+        y1_flag = flags.flags[β,ant1[α],2]
+        x2_flag = flags.flags[β,ant2[α],1]
+        y2_flag = flags.flags[β,ant2[α],2]
+        msflags[1,β,α] |= x1_flag | x2_flag # xx
+        msflags[2,β,α] |= x1_flag | y2_flag # xy
+        msflags[3,β,α] |= y1_flag | x2_flag # yx
+        msflags[4,β,α] |= y1_flag | y2_flag # yy
+    end
 end
 

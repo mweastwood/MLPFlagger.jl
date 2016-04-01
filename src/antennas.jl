@@ -37,9 +37,6 @@ end
 
 ==(lhs::AntennaFlags, rhs::AntennaFlags) = lhs.flags == rhs.flags
 
-getindex(flags::AntennaFlags,I...) = flags.flags[I...]
-setindex!(flags::AntennaFlags,x,I...) = flags.flags[I...] = x
-
 function Base.show(io::IO, flags::AntennaFlags)
     print(io,"Flagged antennas: [")
     ants = UTF8String[]
@@ -50,6 +47,13 @@ function Base.show(io::IO, flags::AntennaFlags)
     end
     print(io,join(ants,", "))
     print(io,"]")
+end
+
+function flag_antennas!(flags, ants)
+    for ant in ants
+        flags.flags[ant,:] = true
+    end
+    flags
 end
 
 """
@@ -80,29 +84,21 @@ function applyflags!(ms::Table, flags::AntennaFlags)
     msflags = ms["FLAG"]
     ant1 = ms["ANTENNA1"] + 1
     ant2 = ms["ANTENNA2"] + 1
-    @inbounds for α = 1:size(msflags, 3)
-        if flags[ant1[α],1]
-            # flag xx and xy
-            msflags[1,:,α] = true
-            msflags[2,:,α] = true
-        end
-        if flags[ant1[α],2]
-            # flag yx and yy
-            msflags[3,:,α] = true
-            msflags[4,:,α] = true
-        end
-        if flags[ant2[α],1]
-            # flag xx and yx
-            msflags[1,:,α] = true
-            msflags[3,:,α] = true
-        end
-        if flags[ant2[α],2]
-            # flag xy and yy
-            msflags[2,:,α] = true
-            msflags[4,:,α] = true
-        end
-    end
+    applyflags!(msflags, flags, ant1, ant2)
     ms["FLAG"] = msflags
     msflags
+end
+
+function applyflags!(msflags, flags::AntennaFlags, ant1, ant2)
+    for α = 1:size(msflags, 3), β = 1:size(msflags, 2)
+        x1_flag = flags.flags[ant1[α],1]
+        y1_flag = flags.flags[ant1[α],2]
+        x2_flag = flags.flags[ant2[α],1]
+        y2_flag = flags.flags[ant2[α],2]
+        msflags[1,β,α] |= x1_flag | x2_flag # xx
+        msflags[2,β,α] |= x1_flag | y2_flag # xy
+        msflags[3,β,α] |= y1_flag | x2_flag # yx
+        msflags[4,β,α] |= y1_flag | y2_flag # yy
+    end
 end
 

@@ -20,7 +20,7 @@ module MLPFlagger
 export applyflags!, clearflags!
 
 export AntennaFlags
-export low_power_antennas
+export flag_antennas!, low_power_antennas
 
 export ChannelFlags
 export bright_narrow_rfi
